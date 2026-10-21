@@ -817,6 +817,12 @@ MonoBehaviour:
   maxHoldTime: 1
   greenGravity: 3
   yellowMoveSpeed: 11
+  useScreenFlip: 1
+  flipStartTime: 5
+  flipEndTime: 10
+  startFlipped: 0
+  reverseControls: 1
+  gameCamera: {fileID: 519420031}
   rb: {fileID: 161531267}
   groundCheck: {fileID: 1989705344}
   groundCheckRadius: 0.2

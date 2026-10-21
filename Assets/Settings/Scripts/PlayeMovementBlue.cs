@@ -29,6 +29,14 @@ public class PlayerMovement : MonoBehaviour
     [Header("Yellow Heart Movement")]
     public float yellowMoveSpeed = 5f;
 
+    [Header("Screen Flip")]
+    public bool useScreenFlip = true;
+    public float flipStartTime = 5f;
+    public float flipEndTime = 10f;
+    public bool startFlipped = false;
+    public bool reverseControls = true;
+    public Camera gameCamera;
+
     [Header("Ground Check")]
     public Rigidbody2D rb;
     public Transform groundCheck;
@@ -47,6 +55,10 @@ public class PlayerMovement : MonoBehaviour
     private bool isGrounded;
     private bool isHoldingJump;
     private float jumpHoldTimer;
+    private bool isFlipped;
+
+    private Quaternion normalCameraRotation;
+    private Quaternion flippedCameraRotation;
 
     void Start()
     {
@@ -61,6 +73,22 @@ public class PlayerMovement : MonoBehaviour
             Debug.LogError("PlayerMovement needs a Rigidbody2D!");
             enabled = false;
             return;
+        }
+
+        if (gameCamera == null)
+            gameCamera = Camera.main;
+
+        if (gameCamera != null)
+        {
+            normalCameraRotation = gameCamera.transform.rotation;
+            flippedCameraRotation = normalCameraRotation *
+                Quaternion.Euler(0f, 0f, 180f);
+        }
+        else
+        {
+            Debug.LogWarning(
+                "Screen flip: No camera found. Tag your camera MainCamera " +
+                "or assign it in the Inspector.");
         }
 
         rb.freezeRotation = true;
@@ -79,19 +107,21 @@ public class PlayerMovement : MonoBehaviour
             playerCollider.sharedMaterial = noFriction;
         }
 
-        // Reset the timer whenever this scene starts.
         fightStartTime = Time.time;
 
-        // Always start the fight with the green soul.
+        // Start with the green soul.
         SetSoulMode(SoulMode.Green);
+
+        SetScreenFlipped(startFlipped);
     }
 
     void Update()
     {
+        float fightTime = Time.time - fightStartTime;
+
+        // Automatically switch between hearts.
         if (useAutomaticSwitching)
         {
-            float fightTime = Time.time - fightStartTime;
-
             if (fightTime >= switchToGreenTime)
             {
                 if (currentSoul != SoulMode.Green)
@@ -104,14 +134,34 @@ public class PlayerMovement : MonoBehaviour
             }
         }
 
-        if (currentSoul == SoulMode.Green)
+        // Automatically flip and unflip the screen.
+        if (useScreenFlip)
         {
-            GreenSoulInput();
+            bool shouldFlip;
+
+            if (flipEndTime >= flipStartTime)
+            {
+                shouldFlip = fightTime >= flipStartTime &&
+                             fightTime < flipEndTime;
+            }
+            else
+            {
+                // If end time is earlier than start time,
+                // the flip remains active after the start time.
+                shouldFlip = fightTime >= flipStartTime;
+            }
+
+            SetScreenFlipped(shouldFlip);
         }
         else
         {
-            YellowHeartInput();
+            SetScreenFlipped(startFlipped);
         }
+
+        if (currentSoul == SoulMode.Green)
+            GreenSoulInput();
+        else
+            YellowHeartInput();
     }
 
     void FixedUpdate()
@@ -120,13 +170,55 @@ public class PlayerMovement : MonoBehaviour
             return;
 
         if (currentSoul == SoulMode.Green)
-        {
             GreenSoulMovement();
-        }
         else
-        {
             YellowHeartMovement();
+    }
+
+    // =========================
+    // SCREEN FLIP
+    // =========================
+
+    void SetScreenFlipped(bool flipped)
+    {
+        isFlipped = flipped;
+
+        if (gameCamera != null)
+        {
+            gameCamera.transform.rotation = flipped
+                ? flippedCameraRotation
+                : normalCameraRotation;
         }
+    }
+
+    // Can be called by another script or a UI button.
+    public void FlipScreenNow()
+    {
+        SetScreenFlipped(!isFlipped);
+    }
+
+    // =========================
+    // CONTROL INPUT
+    // =========================
+
+    float GetHorizontalInput()
+    {
+        float input = Input.GetAxisRaw("Horizontal");
+
+        if (reverseControls && isFlipped)
+            input = -input;
+
+        return input;
+    }
+
+    float GetVerticalInput()
+    {
+        float input = Input.GetAxisRaw("Vertical");
+
+        if (reverseControls && isFlipped)
+            input = -input;
+
+        return input;
     }
 
     // =========================
@@ -135,7 +227,7 @@ public class PlayerMovement : MonoBehaviour
 
     void GreenSoulInput()
     {
-        moveInput = Input.GetAxisRaw("Horizontal");
+        moveInput = GetHorizontalInput();
 
         if (groundCheck != null)
         {
@@ -146,6 +238,7 @@ public class PlayerMovement : MonoBehaviour
             );
         }
 
+        // Jump using Space, W, or Up Arrow.
         if (Input.GetKeyDown(KeyCode.Space) ||
             Input.GetKeyDown(KeyCode.W) ||
             Input.GetKeyDown(KeyCode.UpArrow))
@@ -168,6 +261,10 @@ public class PlayerMovement : MonoBehaviour
         {
             isHoldingJump = false;
         }
+
+        // Also stop jump-hold when the reversed up direction
+        // is released. Jumping itself still uses the physical
+        // Space/W/Up keys.
     }
 
     void GreenSoulMovement()
@@ -194,8 +291,8 @@ public class PlayerMovement : MonoBehaviour
 
     void YellowHeartInput()
     {
-        moveInput = Input.GetAxisRaw("Horizontal");
-        verticalInput = Input.GetAxisRaw("Vertical");
+        moveInput = GetHorizontalInput();
+        verticalInput = GetVerticalInput();
     }
 
     void YellowHeartMovement()
@@ -205,7 +302,6 @@ public class PlayerMovement : MonoBehaviour
             verticalInput
         );
 
-        // Keep diagonal movement at the same speed.
         if (movement.magnitude > 1f)
             movement.Normalize();
 
@@ -229,7 +325,6 @@ public class PlayerMovement : MonoBehaviour
 
         if (newMode == SoulMode.Yellow)
         {
-            // Yellow heart: move in all directions.
             rb.gravityScale = 0f;
 
             if (soulRenderer != null &&
@@ -240,7 +335,6 @@ public class PlayerMovement : MonoBehaviour
         }
         else
         {
-            // Green soul: gravity and jumping.
             rb.gravityScale = greenGravity;
 
             if (soulRenderer != null &&
@@ -261,11 +355,11 @@ public class PlayerMovement : MonoBehaviour
         SetSoulMode(SoulMode.Green);
     }
 
-    // Restart the switching timer if another script needs it.
     public void ResetSoulTimer()
     {
         fightStartTime = Time.time;
         SetSoulMode(SoulMode.Green);
+        SetScreenFlipped(startFlipped);
     }
 
     void OnDrawGizmosSelected()
