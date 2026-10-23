@@ -9,6 +9,9 @@ public class GasterBlasterAttack : MonoBehaviour
     public Sprite closedSprite;
     public Sprite openSprite;
 
+    [Header("Sprite Facing Direction")]
+    public float spriteRotationOffset = 90f;
+
     [Header("Appear Sound")]
     public AudioClip appearSound;
     [Range(0f, 1f)] public float soundVolume = 1f;
@@ -39,6 +42,9 @@ public class GasterBlasterAttack : MonoBehaviour
     private LineRenderer beamLine;
     private bool attackStarted;
 
+    // The circle controller checks this to know when this blaster is done.
+    public bool AttackFinished { get; private set; } = true;
+
     public void SetTarget(Transform target)
     {
         player = target;
@@ -68,6 +74,8 @@ public class GasterBlasterAttack : MonoBehaviour
         line.positionCount = 2;
         line.startWidth = width;
         line.endWidth = width;
+        line.numCapVertices = 4;
+        line.sortingOrder = 100;
 
         Shader shader = Shader.Find("Sprites/Default");
 
@@ -76,22 +84,13 @@ public class GasterBlasterAttack : MonoBehaviour
 
         line.startColor = beamColor;
         line.endColor = beamColor;
-        line.sortingOrder = 100;
-        line.numCapVertices = 4;
 
         return line;
     }
 
     void Start()
     {
-        if (player == null)
-        {
-            GameObject playerObject =
-                GameObject.FindGameObjectWithTag("Player");
-
-            if (playerObject != null)
-                player = playerObject.transform;
-        }
+        FindPlayerIfNeeded();
 
         if (player == null)
         {
@@ -102,8 +101,19 @@ public class GasterBlasterAttack : MonoBehaviour
             return;
         }
 
-        // Also works if the spawner already started the attack.
         StartAttack();
+    }
+
+    void FindPlayerIfNeeded()
+    {
+        if (player != null)
+            return;
+
+        GameObject playerObject =
+            GameObject.FindGameObjectWithTag("Player");
+
+        if (playerObject != null)
+            player = playerObject.transform;
     }
 
     public void StartAttack()
@@ -112,15 +122,17 @@ public class GasterBlasterAttack : MonoBehaviour
             return;
 
         attackStarted = true;
+        AttackFinished = false;
         StartCoroutine(AttackRoutine());
     }
 
-    // Called by the spawner whenever this hidden blaster is reused.
     public void ResetForReuse()
     {
         StopAllCoroutines();
 
         attackStarted = false;
+        AttackFinished = false;
+        FindPlayerIfNeeded();
 
         if (spriteRenderer == null)
             spriteRenderer = GetComponent<SpriteRenderer>();
@@ -136,20 +148,12 @@ public class GasterBlasterAttack : MonoBehaviour
         if (beamLine != null)
             beamLine.enabled = false;
 
-        // Find the player again if needed.
-        if (player == null)
-        {
-            GameObject playerObject =
-                GameObject.FindGameObjectWithTag("Player");
-
-            if (playerObject != null)
-                player = playerObject.transform;
-        }
-
         if (player == null)
         {
             Debug.LogError(
                 "Gaster Blaster: Cannot reuse because Player was not found.");
+
+            AttackFinished = true;
             HideBlaster();
             return;
         }
@@ -164,7 +168,7 @@ public class GasterBlasterAttack : MonoBehaviour
 
         if (player == null)
         {
-            HideBlaster();
+            FinishAttack();
             yield break;
         }
 
@@ -174,30 +178,25 @@ public class GasterBlasterAttack : MonoBehaviour
                 appearSound, transform.position, soundVolume);
         }
 
-        // Lock the aim direction when the attack starts.
         Vector2 direction =
             ((Vector2)player.position -
              (Vector2)transform.position).normalized;
 
         if (direction.sqrMagnitude < 0.001f)
-            direction = Vector2.right;
+            direction = Vector2.down;
 
         float angle =
             Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
 
-        transform.rotation = Quaternion.Euler(0f, 0f, angle);
+        transform.rotation = Quaternion.Euler(
+            0f, 0f, angle - 90f + spriteRotationOffset - 90f);
 
         Vector3 beamStart = transform.position;
-
-        // Show the warning laser.
         Vector3 warningEnd =
             beamStart + (Vector3)(direction * warningDistance);
 
         Color faintColor = new Color(
-            beamColor.r,
-            beamColor.g,
-            beamColor.b,
-            warningAlpha);
+            beamColor.r, beamColor.g, beamColor.b, warningAlpha);
 
         warningLine.startColor = faintColor;
         warningLine.endColor = faintColor;
@@ -209,12 +208,17 @@ public class GasterBlasterAttack : MonoBehaviour
 
         yield return new WaitForSeconds(warningDuration);
 
+        if (player == null)
+        {
+            FinishAttack();
+            yield break;
+        }
+
         warningLine.enabled = false;
 
         if (openSprite != null)
             spriteRenderer.sprite = openSprite;
 
-        // Fire the damaging beam.
         beamLine.startColor = beamColor;
         beamLine.endColor = beamColor;
         beamLine.startWidth = beamWidth;
@@ -249,7 +253,24 @@ public class GasterBlasterAttack : MonoBehaviour
         if (destroyAfterAttackDelay > 0f)
             yield return new WaitForSeconds(destroyAfterAttackDelay);
 
-        // Hide instead of destroying the object.
+        FinishAttack();
+    }
+
+    void FinishAttack()
+    {
+        if (warningLine != null)
+            warningLine.enabled = false;
+
+        if (beamLine != null)
+            beamLine.enabled = false;
+
+        if (spriteRenderer != null && closedSprite != null)
+            spriteRenderer.sprite = closedSprite;
+
+        attackStarted = false;
+        AttackFinished = true;
+
+        // Hide, but do not destroy: the circle controller owns cleanup.
         HideBlaster();
     }
 
@@ -264,7 +285,6 @@ public class GasterBlasterAttack : MonoBehaviour
         if (spriteRenderer != null)
             spriteRenderer.enabled = false;
 
-        // The object still exists and can be reused by the spawner.
         gameObject.SetActive(false);
     }
 
@@ -280,11 +300,9 @@ public class GasterBlasterAttack : MonoBehaviour
             playerCollider =
                 player.GetComponentInChildren<Collider2D>();
 
-        Vector2 playerPosition = player.position;
-
         Vector2 checkPosition = playerCollider != null
             ? playerCollider.ClosestPoint(beamStart)
-            : playerPosition;
+            : (Vector2)player.position;
 
         Vector2 offset = checkPosition - (Vector2)beamStart;
 
@@ -299,6 +317,7 @@ public class GasterBlasterAttack : MonoBehaviour
         if (playerCollider != null)
         {
             Bounds bounds = playerCollider.bounds;
+
             extraReach = Mathf.Max(
                 bounds.extents.x, bounds.extents.y);
         }
@@ -330,8 +349,8 @@ public class GasterBlasterAttack : MonoBehaviour
         else
         {
             Debug.LogError(
-                "Gaster Blaster detected a hit, but couldn't find " +
-                "PlayerHealth on the player or its parents/children.");
+                "Gaster Blaster hit the player, but PlayerHealth " +
+                "could not be found.");
         }
     }
 }
