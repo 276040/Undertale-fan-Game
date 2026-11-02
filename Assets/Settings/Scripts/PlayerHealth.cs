@@ -5,6 +5,7 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using TMPro;
 
+[RequireComponent(typeof(AudioSource))]
 public class PlayerHealth : MonoBehaviour
 {
     [Header("Health")]
@@ -19,17 +20,27 @@ public class PlayerHealth : MonoBehaviour
     [Header("Damage Settings")]
     public float invincibilityDuration = 1f;
     public float flashInterval = 0.1f;
-    public AudioClip hitSound;
-    [Range(0f, 1f)] public float hitSoundVolume = 1f;
+
+    [Header("Hurt Sound")]
+    public AudioClip hurtSound;
+    [Range(0f, 1f)]
+    public float hurtSoundVolume = 1f;
 
     [Header("Healing")]
     public KeyCode healKey = KeyCode.C;
     public int healAmount = 3;
     public int maxHeals = 3;
     public GameObject objectToDestroyWhenOutOfHeals;
-
-    [Header("Healing UI")]
     public TMP_Text healsText;
+
+    [Header("Heal Sound")]
+    public AudioClip healSound;
+    [Range(0f, 1f)]
+    public float healSoundVolume = 1f;
+
+    [Header("Game Over")]
+    public GameObject gameOverPanel;
+    public Button retryButton;
 
     private int healsUsed = 0;
     private bool isInvincible = false;
@@ -52,6 +63,14 @@ public class PlayerHealth : MonoBehaviour
             originalColor = spriteRenderer.color;
 
         audioSource = GetComponent<AudioSource>();
+        audioSource.playOnAwake = false;
+        audioSource.spatialBlend = 0f;
+
+        if (gameOverPanel != null)
+            gameOverPanel.SetActive(false);
+
+        if (retryButton != null)
+            retryButton.onClick.AddListener(Retry);
 
         UpdateHealthUI();
         UpdateHealsUI();
@@ -73,13 +92,8 @@ public class PlayerHealth : MonoBehaviour
 
         currentHealth = Mathf.Max(0, currentHealth - damage);
 
-        if (hitSound != null)
-        {
-            if (audioSource == null)
-                audioSource = gameObject.AddComponent<AudioSource>();
-
-            audioSource.PlayOneShot(hitSound, hitSoundVolume);
-        }
+        if (hurtSound != null)
+            audioSource.PlayOneShot(hurtSound, hurtSoundVolume);
 
         UpdateHealthUI();
 
@@ -107,6 +121,9 @@ public class PlayerHealth : MonoBehaviour
             currentHealth + healAmount
         );
 
+        if (healSound != null)
+            audioSource.PlayOneShot(healSound, healSoundVolume);
+
         UpdateHealthUI();
         UpdateHealsUI();
 
@@ -122,7 +139,13 @@ public class PlayerHealth : MonoBehaviour
         if (isDead || amount <= 0)
             return;
 
+        int oldHealth = currentHealth;
+
         currentHealth = Mathf.Min(maxHealth, currentHealth + amount);
+
+        if (currentHealth > oldHealth && healSound != null)
+            audioSource.PlayOneShot(healSound, healSoundVolume);
+
         UpdateHealthUI();
     }
 
@@ -135,19 +158,13 @@ public class PlayerHealth : MonoBehaviour
         }
 
         if (healthText != null)
-        {
-            healthText.text =
-                "HP: " + currentHealth + " / " + maxHealth;
-        }
+            healthText.text = "HP: " + currentHealth + " / " + maxHealth;
     }
 
     void UpdateHealsUI()
     {
         if (healsText != null)
-        {
-            int remaining = Mathf.Max(0, maxHeals - healsUsed);
-            healsText.text = "Heals: " + remaining;
-        }
+            healsText.text = "Heals: " + (maxHeals - healsUsed);
     }
 
     IEnumerator Invincibility()
@@ -182,26 +199,17 @@ public class PlayerHealth : MonoBehaviour
 
         isDead = true;
 
-        StopAllCoroutines();
+        Time.timeScale = 1f;
+        SceneManager.LoadScene("GameOver");
+    }
 
-        if (spriteRenderer != null)
-            spriteRenderer.color = originalColor;
+    public void Retry()
+    {
+        Time.timeScale = 1f;
 
-        if (GameOverManager.Instance != null)
-        {
-            GameOverManager.Instance.ShowGameOver();
-        }
-        else
-        {
-            Debug.LogWarning(
-                "GameOverManager was not found. Reloading the scene."
-            );
-
-            Time.timeScale = 1f;
-            SceneManager.LoadScene(
-                SceneManager.GetActiveScene().buildIndex
-            );
-        }
+        SceneManager.LoadScene(
+            SceneManager.GetActiveScene().buildIndex
+        );
     }
 
     void OnCollisionEnter2D(Collision2D collision)
@@ -216,3 +224,4 @@ public class PlayerHealth : MonoBehaviour
             TakeDamage(contactDamage);
     }
 }
+
