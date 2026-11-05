@@ -21,48 +21,85 @@ public class RandomWarningSpawner : MonoBehaviour
     public float mainObjectLifetime = 3f;
     public float fadeDuration = 1f;
 
-    void Start()
+    private Coroutine spawnRoutine;
+
+    void OnEnable()
     {
-        StartCoroutine(SpawnRoutine());
+        spawnRoutine = StartCoroutine(SpawnRoutine());
+    }
+
+    void OnDisable()
+    {
+        if (spawnRoutine != null)
+        {
+            StopCoroutine(spawnRoutine);
+            spawnRoutine = null;
+        }
     }
 
     IEnumerator SpawnRoutine()
     {
-        // Wait until the start time
-        yield return new WaitForSeconds(startTime);
+        float elapsed = 0f;
 
-        // Spawn until the stop time
-        while (Time.time < stopTime)
+        // Wait until the starting time.
+        while (elapsed < startTime)
         {
-            int choice = Random.Range(0, 3);
+            yield return null;
+            elapsed += Time.deltaTime;
+        }
 
-            Transform spawnPoint = location1;
-
-            if (choice == 1)
-                spawnPoint = location2;
-            else if (choice == 2)
-                spawnPoint = location3;
-
-            if (spawnPoint == null ||
-                warningObject == null ||
-                mainObject == null)
+        // Spawn until the stopping time.
+        while (elapsed < stopTime)
+        {
+            if (warningObject == null || mainObject == null)
+            {
+                Debug.LogError(
+                    "RandomWarningSpawner: Warning Object or Main Object is missing!"
+                );
                 yield break;
+            }
 
-            // Show warning
+            Transform[] locations =
+            {
+                location1,
+                location2,
+                location3
+            };
+
+            Transform spawnPoint = locations[Random.Range(0, locations.Length)];
+
+            if (spawnPoint == null)
+            {
+                Debug.LogError(
+                    "RandomWarningSpawner: One of the spawn locations is missing!"
+                );
+                yield break;
+            }
+
+            // Create warning.
             GameObject warning = Instantiate(
                 warningObject,
                 spawnPoint.position,
                 Quaternion.identity
             );
 
-            // Wait for warning
-            yield return new WaitForSeconds(warningTime);
+            // Wait for warning time while updating elapsed time.
+            float warningTimer = 0f;
+
+            while (warningTimer < warningTime)
+            {
+                yield return null;
+
+                float delta = Time.deltaTime;
+                warningTimer += delta;
+                elapsed += delta;
+            }
 
             if (warning != null)
                 Destroy(warning);
 
-            // Only spawn if still before the stop time
-            if (Time.time < stopTime)
+            // Spawn main object only if still within the schedule.
+            if (elapsed < stopTime)
             {
                 GameObject spawnedObject = Instantiate(
                     mainObject,
@@ -73,9 +110,20 @@ public class RandomWarningSpawner : MonoBehaviour
                 StartCoroutine(FadeAndDestroy(spawnedObject));
             }
 
-            // Wait before next spawn
-            yield return new WaitForSeconds(spawnInterval);
+            // Wait until the next spawn.
+            float intervalTimer = 0f;
+
+            while (intervalTimer < spawnInterval && elapsed < stopTime)
+            {
+                yield return null;
+
+                float delta = Time.deltaTime;
+                intervalTimer += delta;
+                elapsed += delta;
+            }
         }
+
+        Debug.Log("RandomWarningSpawner: Finished spawning.");
     }
 
     IEnumerator FadeAndDestroy(GameObject obj)
@@ -86,7 +134,7 @@ public class RandomWarningSpawner : MonoBehaviour
             yield break;
 
         SpriteRenderer[] sprites =
-            obj.GetComponentsInChildren<SpriteRenderer>();
+            obj.GetComponentsInChildren<SpriteRenderer>(true);
 
         float timer = 0f;
 
@@ -96,8 +144,9 @@ public class RandomWarningSpawner : MonoBehaviour
                 yield break;
 
             timer += Time.deltaTime;
+
             float alpha = 1f -
-                Mathf.Clamp01(timer / fadeDuration);
+                Mathf.Clamp01(timer / Mathf.Max(0.001f, fadeDuration));
 
             foreach (SpriteRenderer sprite in sprites)
             {

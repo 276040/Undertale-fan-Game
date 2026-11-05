@@ -1,6 +1,6 @@
 
-using UnityEngine;
 using System.Collections;
+using UnityEngine;
 
 public class TimedMovingSpawner : MonoBehaviour
 {
@@ -20,21 +20,43 @@ public class TimedMovingSpawner : MonoBehaviour
     [Header("Lifetime")]
     public float disappearAfter = 5f;
 
-    void Start()
+    private Coroutine spawningRoutine;
+
+    void OnEnable()
     {
-        StartCoroutine(SpawnObjects());
+        spawningRoutine = StartCoroutine(SpawnObjects());
+    }
+
+    void OnDisable()
+    {
+        if (spawningRoutine != null)
+        {
+            StopCoroutine(spawningRoutine);
+            spawningRoutine = null;
+        }
     }
 
     IEnumerator SpawnObjects()
     {
-        // Wait until spawning starts
-        yield return new WaitForSeconds(startTime);
+        float elapsed = 0f;
 
-        // Keep spawning until the stop time
-        while (Time.time < stopTime)
+        // Wait until the starting time.
+        while (elapsed < startTime)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        // Spawn until the stopping time.
+        while (elapsed < stopTime)
         {
             if (objectToSpawn == null || spawnPoint == null)
+            {
+                Debug.LogError(
+                    "TimedMovingSpawner: Assign Object To Spawn and Spawn Point!"
+                );
                 yield break;
+            }
 
             GameObject obj = Instantiate(
                 objectToSpawn,
@@ -44,9 +66,20 @@ public class TimedMovingSpawner : MonoBehaviour
 
             StartCoroutine(MoveObject(obj));
 
-            // Wait before spawning the next object
-            yield return new WaitForSeconds(spawnInterval);
+            // Wait for the next spawn while tracking elapsed battle time.
+            float waitTimer = 0f;
+
+            while (waitTimer < spawnInterval && elapsed < stopTime)
+            {
+                yield return null;
+
+                float delta = Time.deltaTime;
+                waitTimer += delta;
+                elapsed += delta;
+            }
         }
+
+        Debug.Log("TimedMovingSpawner: Finished spawning.");
     }
 
     IEnumerator MoveObject(GameObject obj)

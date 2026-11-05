@@ -48,6 +48,10 @@ public class PlayerMovement : MonoBehaviour
     public Sprite greenSoulSprite;
     public Sprite yellowHeartSprite;
 
+    [Header("Jump Lock")]
+    public bool isJumpLocked = false;
+    public float remainingJumpLockTime = 0f;
+
     private float moveInput;
     private float verticalInput;
     private float fightStartTime;
@@ -56,6 +60,8 @@ public class PlayerMovement : MonoBehaviour
     private bool isHoldingJump;
     private float jumpHoldTimer;
     private bool isFlipped;
+
+    private float jumpLockedUntil = 0f;
 
     private Quaternion normalCameraRotation;
     private Quaternion flippedCameraRotation;
@@ -81,19 +87,17 @@ public class PlayerMovement : MonoBehaviour
         if (gameCamera != null)
         {
             normalCameraRotation = gameCamera.transform.rotation;
+
             flippedCameraRotation = normalCameraRotation *
                 Quaternion.Euler(0f, 0f, 180f);
         }
         else
         {
-            Debug.LogWarning(
-                "Screen flip: No camera found. Tag your camera MainCamera " +
-                "or assign it in the Inspector.");
+            Debug.LogWarning("No camera found for screen flipping.");
         }
 
         rb.freezeRotation = true;
 
-        // Prevent the player from sticking to walls.
         Collider2D playerCollider = GetComponent<Collider2D>();
 
         if (playerCollider != null)
@@ -109,17 +113,21 @@ public class PlayerMovement : MonoBehaviour
 
         fightStartTime = Time.time;
 
-        // Start with the green soul.
         SetSoulMode(SoulMode.Green);
-
         SetScreenFlipped(startFlipped);
     }
 
     void Update()
     {
+        // Update jump lock timer.
+        remainingJumpLockTime =
+            Mathf.Max(0f, jumpLockedUntil - Time.time);
+
+        isJumpLocked = remainingJumpLockTime > 0f;
+
         float fightTime = Time.time - fightStartTime;
 
-        // Automatically switch between hearts.
+        // Automatic soul switching.
         if (useAutomaticSwitching)
         {
             if (fightTime >= switchToGreenTime)
@@ -134,7 +142,7 @@ public class PlayerMovement : MonoBehaviour
             }
         }
 
-        // Automatically flip and unflip the screen.
+        // Screen flipping.
         if (useScreenFlip)
         {
             bool shouldFlip;
@@ -146,8 +154,6 @@ public class PlayerMovement : MonoBehaviour
             }
             else
             {
-                // If end time is earlier than start time,
-                // the flip remains active after the start time.
                 shouldFlip = fightTime >= flipStartTime;
             }
 
@@ -176,6 +182,26 @@ public class PlayerMovement : MonoBehaviour
     }
 
     // =========================
+    // JUMP LOCK
+    // =========================
+
+    public void DisableJumpForSeconds(float duration)
+    {
+        if (duration <= 0f)
+            return;
+
+        jumpLockedUntil = Mathf.Max(
+            jumpLockedUntil,
+            Time.time + duration
+        );
+
+        isHoldingJump = false;
+        jumpHoldTimer = 0f;
+
+        Debug.Log("Jump disabled for " + duration + " seconds!");
+    }
+
+    // =========================
     // SCREEN FLIP
     // =========================
 
@@ -191,7 +217,6 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
-    // Can be called by another script or a UI button.
     public void FlipScreenNow()
     {
         SetScreenFlipped(!isFlipped);
@@ -243,7 +268,7 @@ public class PlayerMovement : MonoBehaviour
             Input.GetKeyDown(KeyCode.W) ||
             Input.GetKeyDown(KeyCode.UpArrow))
         {
-            if (isGrounded)
+            if (isGrounded && !isJumpLocked)
             {
                 rb.linearVelocity = new Vector2(
                     rb.linearVelocity.x,
@@ -261,10 +286,6 @@ public class PlayerMovement : MonoBehaviour
         {
             isHoldingJump = false;
         }
-
-        // Also stop jump-hold when the reversed up direction
-        // is released. Jumping itself still uses the physical
-        // Space/W/Up keys.
     }
 
     void GreenSoulMovement()
@@ -275,6 +296,7 @@ public class PlayerMovement : MonoBehaviour
         );
 
         if (isHoldingJump &&
+            !isJumpLocked &&
             jumpHoldTimer < maxHoldTime &&
             rb.linearVelocity.y > 0f)
         {
@@ -358,6 +380,7 @@ public class PlayerMovement : MonoBehaviour
     public void ResetSoulTimer()
     {
         fightStartTime = Time.time;
+
         SetSoulMode(SoulMode.Green);
         SetScreenFlipped(startFlipped);
     }
@@ -367,6 +390,7 @@ public class PlayerMovement : MonoBehaviour
         if (groundCheck != null)
         {
             Gizmos.color = Color.green;
+
             Gizmos.DrawWireSphere(
                 groundCheck.position,
                 groundCheckRadius

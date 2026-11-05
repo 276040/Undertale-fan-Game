@@ -17,15 +17,25 @@ public class GameOverManager : MonoBehaviour
     {
         Instance = this;
         Time.timeScale = 1f;
+        gameOver = false;
     }
 
     void Start()
     {
         if (gameOverPanel != null)
             gameOverPanel.SetActive(false);
+        else
+            Debug.LogError("Game Over Panel is not assigned!");
 
         if (retryButton != null)
+        {
+            retryButton.onClick.RemoveListener(Retry);
             retryButton.onClick.AddListener(Retry);
+        }
+        else
+        {
+            Debug.LogError("Retry Button is not assigned!");
+        }
     }
 
     public void ShowGameOver()
@@ -37,8 +47,6 @@ public class GameOverManager : MonoBehaviour
 
         if (gameOverPanel != null)
             gameOverPanel.SetActive(true);
-        else
-            Debug.LogError("Game Over Panel is not assigned!");
 
         Time.timeScale = 0f;
     }
@@ -46,9 +54,14 @@ public class GameOverManager : MonoBehaviour
     public void Retry()
     {
         Time.timeScale = 1f;
-
         SceneManager.LoadScene(
             SceneManager.GetActiveScene().buildIndex
         );
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 }
