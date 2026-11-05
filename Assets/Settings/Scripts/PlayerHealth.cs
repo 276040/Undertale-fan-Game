@@ -18,6 +18,7 @@ public class PlayerHealth : MonoBehaviour
     public TMP_Text healthText;
 
     [Header("Damage Settings")]
+    public bool enableInvincibilityFrames = true;
     public float invincibilityDuration = 1f;
     public float flashInterval = 0.1f;
 
@@ -49,6 +50,7 @@ public class PlayerHealth : MonoBehaviour
     private SpriteRenderer spriteRenderer;
     private Color originalColor;
     private AudioSource audioSource;
+    private Coroutine invincibilityRoutine;
 
     void Start()
     {
@@ -87,7 +89,11 @@ public class PlayerHealth : MonoBehaviour
 
     public void TakeDamage(int damage)
     {
-        if (isDead || isInvincible || damage <= 0)
+        if (isDead || damage <= 0)
+            return;
+
+        // Only block damage when invincibility is enabled.
+        if (enableInvincibilityFrames && isInvincible)
             return;
 
         currentHealth = Mathf.Max(0, currentHealth - damage);
@@ -103,7 +109,13 @@ public class PlayerHealth : MonoBehaviour
             return;
         }
 
-        StartCoroutine(Invincibility());
+        if (enableInvincibilityFrames && invincibilityDuration > 0f)
+        {
+            if (invincibilityRoutine != null)
+                StopCoroutine(invincibilityRoutine);
+
+            invincibilityRoutine = StartCoroutine(Invincibility());
+        }
     }
 
     void UseHeal()
@@ -190,6 +202,7 @@ public class PlayerHealth : MonoBehaviour
             spriteRenderer.color = originalColor;
 
         isInvincible = false;
+        invincibilityRoutine = null;
     }
 
     void Die()
@@ -224,4 +237,3 @@ public class PlayerHealth : MonoBehaviour
             TakeDamage(contactDamage);
     }
 }
-
