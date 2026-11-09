@@ -4,11 +4,16 @@ using System.Collections;
 
 public class TimedVisibility : MonoBehaviour
 {
+    [Header("Timing")]
     public float appearTime = 3f;
     public float disappearTime = 5f;
 
+    [Header("Settings")]
+    public bool repeat = false;
+
     private SpriteRenderer spriteRenderer;
     private Collider2D[] colliders;
+    private Coroutine visibilityCoroutine;
 
     void Awake()
     {
@@ -16,27 +21,39 @@ public class TimedVisibility : MonoBehaviour
         colliders = GetComponents<Collider2D>();
     }
 
-    void Start()
+    void OnEnable()
     {
-        StartCoroutine(ShowAndHide());
+        SetVisible(false);
+
+        visibilityCoroutine = StartCoroutine(ShowAndHide());
+    }
+
+    void OnDisable()
+    {
+        if (visibilityCoroutine != null)
+        {
+            StopCoroutine(visibilityCoroutine);
+            visibilityCoroutine = null;
+        }
     }
 
     IEnumerator ShowAndHide()
     {
-        // Hide the sprite and colliders
-        SetVisible(false);
+        do
+        {
+            SetVisible(false);
 
-        // Wait before appearing
-        yield return new WaitForSeconds(appearTime);
+            yield return new WaitForSeconds(appearTime);
 
-        // Show the sprite and enable colliders
-        SetVisible(true);
+            SetVisible(true);
 
-        // Wait before disappearing
-        yield return new WaitForSeconds(disappearTime);
+            yield return new WaitForSeconds(disappearTime);
 
-        // Hide the sprite and disable colliders
-        SetVisible(false);
+            SetVisible(false);
+
+        } while (repeat);
+
+        visibilityCoroutine = null;
     }
 
     void SetVisible(bool visible)
@@ -46,7 +63,8 @@ public class TimedVisibility : MonoBehaviour
 
         foreach (Collider2D col in colliders)
         {
-            col.enabled = visible;
+            if (col != null)
+                col.enabled = visible;
         }
     }
 }

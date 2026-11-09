@@ -1,5 +1,6 @@
 
 using UnityEngine;
+using System.Collections;
 
 public class PlayerMovement : MonoBehaviour
 {
@@ -26,6 +27,12 @@ public class PlayerMovement : MonoBehaviour
     public float maxHoldTime = 0.3f;
     public float greenGravity = 3f;
 
+    [Header("Slam Jump")]
+    [Tooltip("How long normal movement is paused after a slam launch.")]
+    public float slamJumpControlTime = 0.5f;
+
+    private float slamMovementOverrideUntil = 0f;
+
     [Header("Yellow Heart Movement")]
     public float yellowMoveSpeed = 5f;
 
@@ -36,6 +43,19 @@ public class PlayerMovement : MonoBehaviour
     public bool startFlipped = false;
     public bool reverseControls = true;
     public Camera gameCamera;
+
+    [Header("Smooth Flip Animation")]
+    public float flipDuration = 0.7f;
+    public bool spinClockwise = true;
+    public AnimationCurve flipCurve =
+        AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+
+    [Header("Flip Sound")]
+    public AudioClip flipSound;
+    [Range(0f, 1f)]
+    public float flipSoundVolume = 1f;
+
+    private AudioSource audioSource;
 
     [Header("Ground Check")]
     public Rigidbody2D rb;
@@ -66,6 +86,8 @@ public class PlayerMovement : MonoBehaviour
     private Quaternion normalCameraRotation;
     private Quaternion flippedCameraRotation;
 
+    private Coroutine flipCoroutine;
+
     void Start()
     {
         if (rb == null)
@@ -83,6 +105,14 @@ public class PlayerMovement : MonoBehaviour
 
         if (gameCamera == null)
             gameCamera = Camera.main;
+
+        audioSource = GetComponent<AudioSource>();
+
+        if (audioSource == null)
+            audioSource = gameObject.AddComponent<AudioSource>();
+
+        audioSource.playOnAwake = false;
+        audioSource.spatialBlend = 0f;
 
         if (gameCamera != null)
         {
@@ -119,7 +149,6 @@ public class PlayerMovement : MonoBehaviour
 
     void Update()
     {
-        // Update jump lock timer.
         remainingJumpLockTime =
             Mathf.Max(0f, jumpLockedUntil - Time.time);
 
@@ -127,7 +156,6 @@ public class PlayerMovement : MonoBehaviour
 
         float fightTime = Time.time - fightStartTime;
 
-        // Automatic soul switching.
         if (useAutomaticSwitching)
         {
             if (fightTime >= switchToGreenTime)
@@ -142,7 +170,6 @@ public class PlayerMovement : MonoBehaviour
             }
         }
 
-        // Screen flipping.
         if (useScreenFlip)
         {
             bool shouldFlip;
@@ -175,15 +202,37 @@ public class PlayerMovement : MonoBehaviour
         if (rb == null)
             return;
 
+        // Do not overwrite the launch velocity during a slam jump.
+        if (Time.time < slamMovementOverrideUntil)
+            return;
+
         if (currentSoul == SoulMode.Green)
             GreenSoulMovement();
         else
             YellowHeartMovement();
     }
 
-    // =========================
-    // JUMP LOCK
-    // =========================
+    // Call this from SideSlamController when the player jumps off a wall.
+    public void BeginSlamJump(Vector2 launchVelocity)
+    {
+        if (rb == null)
+            return;
+
+        isHoldingJump = false;
+        jumpHoldTimer = 0f;
+
+        slamMovementOverrideUntil =
+            Time.time + Mathf.Max(0.05f, slamJumpControlTime);
+
+        rb.linearVelocity = launchVelocity;
+
+        Debug.Log("Slam jump launched! Velocity: " + launchVelocity);
+    }
+
+    public bool IsSlamJumpActive()
+    {
+        return Time.time < slamMovementOverrideUntil;
+    }
 
     public void DisableJumpForSeconds(float duration)
     {
@@ -201,30 +250,78 @@ public class PlayerMovement : MonoBehaviour
         Debug.Log("Jump disabled for " + duration + " seconds!");
     }
 
-    // =========================
-    // SCREEN FLIP
-    // =========================
-
     void SetScreenFlipped(bool flipped)
     {
+        if (isFlipped == flipped)
+            return;
+
         isFlipped = flipped;
 
-        if (gameCamera != null)
+        if (gameCamera == null)
+            return;
+
+        if (flipCoroutine != null)
+            StopCoroutine(flipCoroutine);
+
+        if (flipSound != null)
         {
-            gameCamera.transform.rotation = flipped
-                ? flippedCameraRotation
-                : normalCameraRotation;
+            audioSource.PlayOneShot(
+                flipSound,
+                flipSoundVolume
+            );
         }
+
+        Quaternion targetRotation = flipped
+            ? flippedCameraRotation
+            : normalCameraRotation;
+
+        flipCoroutine = StartCoroutine(
+            SmoothCameraFlip(targetRotation, flipped)
+        );
+    }
+
+    IEnumerator SmoothCameraFlip(
+        Quaternion targetRotation,
+        bool flipping
+    )
+    {
+        if (gameCamera == null)
+            yield break;
+
+        Quaternion startRotation =
+            gameCamera.transform.rotation;
+
+        float direction = spinClockwise ? -1f : 1f;
+
+        if (!flipping)
+            direction *= -1f;
+
+        float duration = Mathf.Max(0.01f, flipDuration);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+
+            float progress = Mathf.Clamp01(elapsed / duration);
+            float curveValue = flipCurve.Evaluate(progress);
+            float angle = 180f * curveValue * direction;
+
+            gameCamera.transform.rotation =
+                startRotation *
+                Quaternion.Euler(0f, 0f, angle);
+
+            yield return null;
+        }
+
+        gameCamera.transform.rotation = targetRotation;
+        flipCoroutine = null;
     }
 
     public void FlipScreenNow()
     {
         SetScreenFlipped(!isFlipped);
     }
-
-    // =========================
-    // CONTROL INPUT
-    // =========================
 
     float GetHorizontalInput()
     {
@@ -246,10 +343,6 @@ public class PlayerMovement : MonoBehaviour
         return input;
     }
 
-    // =========================
-    // GREEN SOUL INPUT
-    // =========================
-
     void GreenSoulInput()
     {
         moveInput = GetHorizontalInput();
@@ -263,12 +356,12 @@ public class PlayerMovement : MonoBehaviour
             );
         }
 
-        // Jump using Space, W, or Up Arrow.
         if (Input.GetKeyDown(KeyCode.Space) ||
             Input.GetKeyDown(KeyCode.W) ||
             Input.GetKeyDown(KeyCode.UpArrow))
         {
-            if (isGrounded && !isJumpLocked)
+            if (isGrounded && !isJumpLocked &&
+                !IsSlamJumpActive())
             {
                 rb.linearVelocity = new Vector2(
                     rb.linearVelocity.x,
@@ -307,10 +400,6 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
-    // =========================
-    // YELLOW HEART INPUT
-    // =========================
-
     void YellowHeartInput()
     {
         moveInput = GetHorizontalInput();
@@ -329,10 +418,6 @@ public class PlayerMovement : MonoBehaviour
 
         rb.linearVelocity = movement * yellowMoveSpeed;
     }
-
-    // =========================
-    // CHANGE SOUL
-    // =========================
 
     public void SetSoulMode(SoulMode newMode)
     {
