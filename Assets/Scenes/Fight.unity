@@ -3044,7 +3044,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   musicSource: {fileID: 271103784}
-  startSongAtSeconds: 30.75
+  startSongAtSeconds: 30.65
   playOnSceneStart: 1
   loopMusic: 0
 --- !u!4 &271103786
