@@ -12,7 +12,7 @@ public class MovingPlatformMove : MonoBehaviour
     public float maxMoveDistance = 5f;
 
     [Header("Visibility Settings")]
-    public SpriteRenderer platformSprite;
+    public TimedVisibility timedVisibility;
 
     private Vector3 startPosition;
     private Vector3 direction;
@@ -26,18 +26,21 @@ public class MovingPlatformMove : MonoBehaviour
         else
             direction = Vector3.right;
 
-        // Automatically find the platform's Sprite Renderer.
-        if (platformSprite == null)
-            platformSprite = GetComponent<SpriteRenderer>();
+        if (timedVisibility == null)
+            timedVisibility = GetComponent<TimedVisibility>();
 
-        if (platformSprite == null)
-            platformSprite = GetComponentInChildren<SpriteRenderer>();
+        if (timedVisibility == null)
+            timedVisibility = GetComponentInParent<TimedVisibility>();
     }
 
     void Update()
     {
-        // Stop if there is no sprite or it isn't visible by any camera.
-        if (platformSprite == null || !platformSprite.isVisible)
+        // Do not move if the visibility controller is missing.
+        if (timedVisibility == null)
+            return;
+
+        // Only move while the platform is visible.
+        if (!timedVisibility.IsVisible)
             return;
 
         // Stop after reaching the optional movement limit.
@@ -47,7 +50,6 @@ public class MovingPlatformMove : MonoBehaviour
             return;
         }
 
-        // Move only while the sprite is visible.
         transform.position += direction * moveSpeed * Time.deltaTime;
     }
 }

@@ -11,19 +11,25 @@ public class TimedVisibility : MonoBehaviour
     [Header("Settings")]
     public bool repeat = false;
 
-    private SpriteRenderer spriteRenderer;
+    private SpriteRenderer[] spriteRenderers;
     private Collider2D[] colliders;
     private Coroutine visibilityCoroutine;
 
+    public bool IsVisible { get; private set; }
+
     void Awake()
     {
-        spriteRenderer = GetComponent<SpriteRenderer>();
-        colliders = GetComponents<Collider2D>();
+        // Find renderers and colliders on this object and its children.
+        spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+        colliders = GetComponentsInChildren<Collider2D>(true);
     }
 
     void OnEnable()
     {
         SetVisible(false);
+
+        if (visibilityCoroutine != null)
+            StopCoroutine(visibilityCoroutine);
 
         visibilityCoroutine = StartCoroutine(ShowAndHide());
     }
@@ -35,6 +41,8 @@ public class TimedVisibility : MonoBehaviour
             StopCoroutine(visibilityCoroutine);
             visibilityCoroutine = null;
         }
+
+        SetVisible(false);
     }
 
     IEnumerator ShowAndHide()
@@ -56,10 +64,15 @@ public class TimedVisibility : MonoBehaviour
         visibilityCoroutine = null;
     }
 
-    void SetVisible(bool visible)
+    public void SetVisible(bool visible)
     {
-        if (spriteRenderer != null)
-            spriteRenderer.enabled = visible;
+        IsVisible = visible;
+
+        foreach (SpriteRenderer sr in spriteRenderers)
+        {
+            if (sr != null)
+                sr.enabled = visible;
+        }
 
         foreach (Collider2D col in colliders)
         {

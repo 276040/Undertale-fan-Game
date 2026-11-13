@@ -1,6 +1,17 @@
 
 using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
+
+[System.Serializable]
+public class SoulSwitchEvent
+{
+    [Min(0f)]
+    public float switchTime = 10f;
+
+    public PlayerMovement.SoulMode soulToSwitchTo =
+        PlayerMovement.SoulMode.Yellow;
+}
 
 public class PlayerMovement : MonoBehaviour
 {
@@ -15,8 +26,29 @@ public class PlayerMovement : MonoBehaviour
 
     [Header("Automatic Soul Switching")]
     public bool useAutomaticSwitching = true;
-    public float switchToYellowTime = 10f;
-    public float switchToGreenTime = 20f;
+
+    public List<SoulSwitchEvent> soulSwitchSchedule =
+        new List<SoulSwitchEvent>
+        {
+            new SoulSwitchEvent
+            {
+                switchTime = 10f,
+                soulToSwitchTo = SoulMode.Yellow
+            },
+            new SoulSwitchEvent
+            {
+                switchTime = 20f,
+                soulToSwitchTo = SoulMode.Green
+            }
+        };
+
+    [Header("Heart Switch Sound")]
+    public AudioClip heartSwitchSound;
+
+    [Range(0f, 1f)]
+    public float heartSwitchVolume = 1f;
+
+    private int nextSoulSwitchIndex = 0;
 
     [Header("Movement")]
     public float moveSpeed = 5f;
@@ -52,6 +84,7 @@ public class PlayerMovement : MonoBehaviour
 
     [Header("Flip Sound")]
     public AudioClip flipSound;
+
     [Range(0f, 1f)]
     public float flipSoundVolume = 1f;
 
@@ -156,20 +189,30 @@ public class PlayerMovement : MonoBehaviour
 
         float fightTime = Time.time - fightStartTime;
 
-        if (useAutomaticSwitching)
+        // Multiple automatic heart switches.
+        if (useAutomaticSwitching && soulSwitchSchedule != null)
         {
-            if (fightTime >= switchToGreenTime)
+            while (nextSoulSwitchIndex < soulSwitchSchedule.Count)
             {
-                if (currentSoul != SoulMode.Green)
-                    ActivateGreenSoul();
-            }
-            else if (fightTime >= switchToYellowTime)
-            {
-                if (currentSoul != SoulMode.Yellow)
-                    ActivateYellowHeart();
+                SoulSwitchEvent switchEvent =
+                    soulSwitchSchedule[nextSoulSwitchIndex];
+
+                if (switchEvent == null)
+                {
+                    nextSoulSwitchIndex++;
+                    continue;
+                }
+
+                if (fightTime < switchEvent.switchTime)
+                    break;
+
+                SetSoulMode(switchEvent.soulToSwitchTo);
+
+                nextSoulSwitchIndex++;
             }
         }
 
+        // Automatic screen flipping.
         if (useScreenFlip)
         {
             bool shouldFlip;
@@ -202,7 +245,6 @@ public class PlayerMovement : MonoBehaviour
         if (rb == null)
             return;
 
-        // Do not overwrite the launch velocity during a slam jump.
         if (Time.time < slamMovementOverrideUntil)
             return;
 
@@ -212,7 +254,6 @@ public class PlayerMovement : MonoBehaviour
             YellowHeartMovement();
     }
 
-    // Call this from SideSlamController when the player jumps off a wall.
     public void BeginSlamJump(Vector2 launchVelocity)
     {
         if (rb == null)
@@ -421,7 +462,20 @@ public class PlayerMovement : MonoBehaviour
 
     public void SetSoulMode(SoulMode newMode)
     {
+        bool changedHeart = currentSoul != newMode;
+
         currentSoul = newMode;
+
+        // Play sound only when the heart actually changes.
+        if (changedHeart &&
+            heartSwitchSound != null &&
+            audioSource != null)
+        {
+            audioSource.PlayOneShot(
+                heartSwitchSound,
+                heartSwitchVolume
+            );
+        }
 
         if (rb == null)
             return;
@@ -465,6 +519,7 @@ public class PlayerMovement : MonoBehaviour
     public void ResetSoulTimer()
     {
         fightStartTime = Time.time;
+        nextSoulSwitchIndex = 0;
 
         SetSoulMode(SoulMode.Green);
         SetScreenFlipped(startFlipped);
