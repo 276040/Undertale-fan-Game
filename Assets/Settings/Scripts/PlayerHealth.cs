@@ -43,6 +43,23 @@ public class PlayerHealth : MonoBehaviour
     public GameObject gameOverPanel;
     public Button retryButton;
 
+    [Header("Death Level Settings")]
+    public DeathDestination deathDestination = DeathDestination.GameOverScene;
+
+    [Tooltip("Scene name to load when Custom Scene is selected.")]
+    public string deathLevelName = "GameOver";
+
+    [Tooltip("Scene build index to load when Custom Build Index is selected.")]
+    public int deathLevelBuildIndex = 0;
+
+    public enum DeathDestination
+    {
+        GameOverScene,
+        CustomScene,
+        CustomBuildIndex,
+        RestartCurrentLevel
+    }
+
     private int healsUsed = 0;
     private bool isInvincible = false;
     private bool isDead = false;
@@ -92,7 +109,6 @@ public class PlayerHealth : MonoBehaviour
         if (isDead || damage <= 0)
             return;
 
-        // Only block damage when invincibility is enabled.
         if (enableInvincibilityFrames && isInvincible)
             return;
 
@@ -213,7 +229,61 @@ public class PlayerHealth : MonoBehaviour
         isDead = true;
 
         Time.timeScale = 1f;
-        SceneManager.LoadScene("GameOver");
+
+        switch (deathDestination)
+        {
+            case DeathDestination.GameOverScene:
+                LoadSceneSafely("GameOver");
+                break;
+
+            case DeathDestination.CustomScene:
+                LoadSceneSafely(deathLevelName);
+                break;
+
+            case DeathDestination.CustomBuildIndex:
+                LoadSceneByBuildIndexSafely(deathLevelBuildIndex);
+                break;
+
+            case DeathDestination.RestartCurrentLevel:
+                SceneManager.LoadScene(
+                    SceneManager.GetActiveScene().buildIndex
+                );
+                break;
+        }
+    }
+
+    void LoadSceneSafely(string sceneName)
+    {
+        if (string.IsNullOrWhiteSpace(sceneName))
+        {
+            Debug.LogError("Death Level Settings: Scene name is empty!");
+            return;
+        }
+
+        if (!Application.CanStreamedLevelBeLoaded(sceneName))
+        {
+            Debug.LogError(
+                "Death Level Settings: Scene '" + sceneName +
+                "' is not available. Add it to Build Profiles."
+            );
+            return;
+        }
+
+        SceneManager.LoadScene(sceneName);
+    }
+
+    void LoadSceneByBuildIndexSafely(int buildIndex)
+    {
+        if (buildIndex < 0 ||
+            buildIndex >= SceneManager.sceneCountInBuildSettings)
+        {
+            Debug.LogError(
+                "Death Level Settings: Invalid scene build index!"
+            );
+            return;
+        }
+
+        SceneManager.LoadScene(buildIndex);
     }
 
     public void Retry()

@@ -726,7 +726,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9e2d3f9600fdb4b6bafe7adda5ef7ba3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  sceneToLoad: Fight
+  sceneName: Diffuculty Selecter
 --- !u!1 &1076385172
 GameObject:
   m_ObjectHideFlags: 0
