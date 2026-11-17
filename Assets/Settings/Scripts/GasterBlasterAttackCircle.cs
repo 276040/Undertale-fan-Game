@@ -9,310 +9,204 @@ public class GasterBlasterAttackCircle : MonoBehaviour
     public Sprite closedSprite;
     public Sprite openSprite;
 
-    [Header("Sound")]
+    [Header("Appearance Sound")]
     public AudioClip appearSound;
+
     [Range(0f, 1f)]
     public float soundVolume = 1f;
 
-    [Header("Warning Laser")]
-    public float warningDuration = 1f;
-    public float warningWidth = 0.15f;
-    public Color warningColor = new Color(1f, 0f, 0f, 0.35f);
+    public float appearDelay = 0f;
 
-    [Header("Attack Beam")]
-    public float beamDuration = 0.7f;
-    public float beamWidth = 0.8f;
-    public Color beamColor = Color.cyan;
-
-    [Header("Damage")]
-    public int damage = 1;
-    public float damageInterval = 0.5f;
+    [Tooltip("Minimum time between appearance sounds from all blasters.")]
+    [Min(0f)]
+    public float globalSoundCooldown = 0.12f;
 
     [Header("Blaster Facing")]
     public float rotationOffset = 0f;
 
-    private Vector3 fixedCenterPosition;
-    private float orbitRadius;
-    private float orbitAngle;
-    private float orbitSpeed;
-    private bool clockwise;
-    private bool setupComplete;
-
-    private Quaternion fixedRotation;
+    [Header("References")]
+    public GasterBlasterLaserController laserController;
 
     private SpriteRenderer spriteRenderer;
-    private LineRenderer warningLine;
-    private LineRenderer beamLine;
+    private Vector3 fixedCenter;
+    private bool initialized;
+    private bool finished;
 
-    private bool hasFired;
-    private bool hidden;
-    private float nextDamageTime;
+    private static AudioSource sharedSoundSource;
+    private static float nextGlobalSoundTime;
 
     private void Awake()
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
 
-        if (closedSprite != null)
-            spriteRenderer.sprite = closedSprite;
-
-        warningLine = CreateLine(
-            "Warning Laser", warningColor, warningWidth
-        );
-
-        beamLine = CreateLine(
-            "Attack Beam", beamColor, beamWidth
-        );
-
-        warningLine.enabled = false;
-        beamLine.enabled = false;
-    }
-
-    public void Setup(
-        Transform center,
-        float radius,
-        float startingAngle,
-        float speed,
-        bool rotateClockwise)
-    {
-        if (center == null)
+        if (laserController == null)
         {
-            Debug.LogError("Gaster Blaster: Orbit Center is missing!");
-            return;
+            laserController =
+                GetComponent<GasterBlasterLaserController>();
         }
 
-        fixedCenterPosition = center.position;
+        if (laserController == null)
+        {
+            Debug.LogError(
+                "Gaster Blaster: Add GasterBlasterLaserController " +
+                "to the prefab."
+            );
+        }
 
-        orbitRadius = radius;
-        orbitAngle = startingAngle;
-        orbitSpeed = speed;
-        clockwise = rotateClockwise;
+        CreateSharedSoundSource();
+    }
 
-        hasFired = false;
-        hidden = false;
-        setupComplete = true;
+    private static void CreateSharedSoundSource()
+    {
+        if (sharedSoundSource != null)
+            return;
+
+        AudioListener listener = FindObjectOfType<AudioListener>();
+
+        GameObject soundObject;
+
+        if (listener != null)
+        {
+            soundObject = listener.gameObject;
+        }
+        else
+        {
+            soundObject = new GameObject(
+                "Gaster Blaster Shared Sound"
+            );
+
+            Debug.LogWarning(
+                "No AudioListener found. Created a separate sound object."
+            );
+        }
+
+        sharedSoundSource =
+            soundObject.GetComponent<AudioSource>();
+
+        if (sharedSoundSource == null)
+        {
+            sharedSoundSource =
+                soundObject.AddComponent<AudioSource>();
+        }
+
+        sharedSoundSource.playOnAwake = false;
+        sharedSoundSource.loop = false;
+        sharedSoundSource.spatialBlend = 0f;
+        sharedSoundSource.priority = 32;
+    }
+
+    public void Setup(Transform center, float angle, float radius)
+    {
+        if (center == null)
+            return;
+
+        fixedCenter = center.position;
+
+        Vector2 offset = new Vector2(
+            Mathf.Cos(angle * Mathf.Deg2Rad),
+            Mathf.Sin(angle * Mathf.Deg2Rad)
+        ) * radius;
+
+        transform.position = fixedCenter + (Vector3)offset;
+
+        Vector2 inward =
+            ((Vector2)fixedCenter -
+             (Vector2)transform.position).normalized;
+
+        float facingAngle =
+            Mathf.Atan2(inward.y, inward.x) * Mathf.Rad2Deg;
+
+        transform.rotation = Quaternion.Euler(
+            0f, 0f, facingAngle + rotationOffset
+        );
+
+        if (laserController != null)
+            laserController.Setup(fixedCenter);
+
+        initialized = true;
+        finished = false;
 
         spriteRenderer.enabled = true;
 
         if (closedSprite != null)
             spriteRenderer.sprite = closedSprite;
-
-        warningLine.enabled = false;
-        beamLine.enabled = false;
-
-        // Calculate the inward-facing rotation once.
-        Vector2 inward = (
-            (Vector2)fixedCenterPosition -
-            (Vector2)transform.position
-        ).normalized;
-
-        float angle = Mathf.Atan2(inward.y, inward.x) * Mathf.Rad2Deg;
-
-        fixedRotation = Quaternion.Euler(
-            0f, 0f, angle + rotationOffset
-        );
-
-        transform.rotation = fixedRotation;
-
-        UpdateOrbitPosition();
-        UpdateLaserPositions();
     }
 
-    public void SetRotationOffset(float offset)
+    public IEnumerator RunAttackRounds(
+        int rounds,
+        float delayAfterSpawn,
+        float timeBetweenRounds)
     {
-        rotationOffset = offset;
-
-        if (!setupComplete)
-            return;
-
-        Vector2 inward = (
-            (Vector2)fixedCenterPosition -
-            (Vector2)transform.position
-        ).normalized;
-
-        float angle = Mathf.Atan2(inward.y, inward.x) * Mathf.Rad2Deg;
-
-        fixedRotation = Quaternion.Euler(
-            0f, 0f, angle + rotationOffset
-        );
-
-        transform.rotation = fixedRotation;
-    }
-
-    private void Update()
-    {
-        if (!setupComplete || hidden)
-            return;
-
-        float direction = clockwise ? -1f : 1f;
-
-        // Move around the circle without changing rotation.
-        orbitAngle += direction * orbitSpeed * Time.deltaTime;
-
-        UpdateOrbitPosition();
-        UpdateLaserPositions();
-    }
-
-    private void UpdateOrbitPosition()
-    {
-        Vector2 offset = new Vector2(
-            Mathf.Cos(orbitAngle * Mathf.Deg2Rad),
-            Mathf.Sin(orbitAngle * Mathf.Deg2Rad)
-        ) * orbitRadius;
-
-        transform.position = fixedCenterPosition + (Vector3)offset;
-
-        // Keep the rotation fixed.
-        transform.rotation = fixedRotation;
-    }
-
-    public void Fire()
-    {
-        if (!setupComplete || hasFired || hidden ||
-            !gameObject.activeInHierarchy)
-            return;
-
-        hasFired = true;
-        StartCoroutine(FireRoutine());
-    }
-
-    private IEnumerator FireRoutine()
-    {
-        if (appearSound != null)
+        if (!initialized || laserController == null)
         {
-            AudioSource.PlayClipAtPoint(
-                appearSound,
-                transform.position,
-                soundVolume
-            );
+            finished = true;
+            yield break;
         }
 
-        if (openSprite != null)
-            spriteRenderer.sprite = openSprite;
+        yield return new WaitForSeconds(
+            Mathf.Max(0f, delayAfterSpawn)
+        );
 
-        warningLine.enabled = true;
-
-        float timer = 0f;
-
-        while (timer < warningDuration)
+        for (int i = 0; i < rounds; i++)
         {
-            UpdateLaserPositions();
-            timer += Time.deltaTime;
-            yield return null;
-        }
-
-        warningLine.enabled = false;
-        beamLine.enabled = true;
-
-        timer = 0f;
-        nextDamageTime = 0f;
-
-        while (timer < beamDuration)
-        {
-            UpdateLaserPositions();
-
-            if (Time.time >= nextDamageTime)
+            if (i > 0)
             {
-                DamagePlayerOnBeam();
+                spriteRenderer.enabled = true;
 
-                nextDamageTime =
-                    Time.time + Mathf.Max(0.05f, damageInterval);
+                if (closedSprite != null)
+                    spriteRenderer.sprite = closedSprite;
+
+                yield return new WaitForSeconds(
+                    Mathf.Max(0f, timeBetweenRounds)
+                );
             }
 
-            timer += Time.deltaTime;
-            yield return null;
+            if (appearDelay > 0f)
+                yield return new WaitForSeconds(appearDelay);
+
+            PlayAppearanceSound();
+
+            if (openSprite != null)
+                spriteRenderer.sprite = openSprite;
+
+            yield return StartCoroutine(laserController.Fire());
         }
 
-        beamLine.enabled = false;
         HideBlaster();
+        finished = true;
     }
 
-    private Vector3 GetInwardDirection()
+    private void PlayAppearanceSound()
     {
-        return (
-            fixedCenterPosition - transform.position
-        ).normalized;
-    }
-
-    private void UpdateLaserPositions()
-    {
-        if (!setupComplete)
+        if (appearSound == null)
             return;
 
-        Vector3 start = transform.position;
+        if (sharedSoundSource == null)
+            CreateSharedSoundSource();
 
-        // Always aim at the fixed center, never at the player.
-        Vector3 direction = GetInwardDirection();
-
-        Vector3 end = fixedCenterPosition;
-
-        warningLine.SetPosition(0, start);
-        warningLine.SetPosition(1, end);
-
-        beamLine.SetPosition(0, start);
-        beamLine.SetPosition(1, end);
-    }
-
-    private void DamagePlayerOnBeam()
-    {
-        if (!setupComplete)
+        if (Time.time < nextGlobalSoundTime)
             return;
 
-        Vector3 start = transform.position;
-        Vector3 direction = GetInwardDirection();
-
-        RaycastHit2D[] hits = Physics2D.RaycastAll(
-            start,
-            direction,
-            orbitRadius
+        sharedSoundSource.PlayOneShot(
+            appearSound,
+            soundVolume
         );
 
-        foreach (RaycastHit2D hit in hits)
-        {
-            if (hit.collider == null)
-                continue;
+        nextGlobalSoundTime =
+            Time.time + Mathf.Max(0f, globalSoundCooldown);
+    }
 
-            PlayerHealth health =
-                hit.collider.GetComponent<PlayerHealth>();
-
-            if (health == null)
-                health = hit.collider.GetComponentInParent<PlayerHealth>();
-
-            if (health != null)
-            {
-                health.TakeDamage(damage);
-                return;
-            }
-        }
+    public bool IsFinished()
+    {
+        return finished;
     }
 
     public void HideBlaster()
     {
-        hidden = true;
+        if (spriteRenderer != null)
+            spriteRenderer.enabled = false;
 
-        spriteRenderer.enabled = false;
-        warningLine.enabled = false;
-        beamLine.enabled = false;
-    }
-
-    private LineRenderer CreateLine(
-        string objectName,
-        Color color,
-        float width)
-    {
-        GameObject lineObject = new GameObject(objectName);
-        lineObject.transform.SetParent(transform, false);
-
-        LineRenderer line = lineObject.AddComponent<LineRenderer>();
-
-        line.useWorldSpace = true;
-        line.positionCount = 2;
-        line.startWidth = width;
-        line.endWidth = width;
-        line.startColor = color;
-        line.endColor = color;
-        line.material = new Material(Shader.Find("Sprites/Default"));
-        line.sortingOrder = 101;
-
-        return line;
+        if (laserController != null)
+            laserController.HideLasers();
     }
 }
