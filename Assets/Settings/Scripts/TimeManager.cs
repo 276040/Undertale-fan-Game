@@ -1,5 +1,6 @@
 
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using TMPro;
 using System;
 
@@ -12,19 +13,29 @@ public class GameTimeTracker : MonoBehaviour
     public TMP_Text playTimeText;
     public TMP_Text dateText;
 
-    [Header("Settings")]
+    [Header("Display Settings")]
     public bool showRealTime = true;
     public bool showPlayTime = true;
     public bool showDate = true;
     public bool use24HourClock = false;
 
+    [Header("Scene Timer Settings")]
+    public string timerSceneName = "SansFight";
+    public string destinationSceneName = "Ending";
+
+    public float timeBeforeSceneChange = 300f;
+    public bool enableSceneTimer = true;
+
     private float totalPlayTime;
+    private float sceneTimer;
+    private bool sceneTimerFinished;
+    private bool wasInTimerScene;
 
     public float TotalPlayTime => totalPlayTime;
+    public float SceneTimer => sceneTimer;
 
     void Awake()
     {
-        // Prevent duplicate trackers when changing scenes.
         if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
@@ -37,10 +48,44 @@ public class GameTimeTracker : MonoBehaviour
 
     void Update()
     {
-        // Track how long the game has been running.
         totalPlayTime += Time.unscaledDeltaTime;
 
         UpdateDisplays();
+
+        if (!enableSceneTimer)
+            return;
+
+        bool isInTimerScene =
+            SceneManager.GetActiveScene().name == timerSceneName;
+
+        // Player has entered the timer scene.
+        if (isInTimerScene && !wasInTimerScene)
+        {
+            sceneTimer = 0f;
+            sceneTimerFinished = false;
+        }
+
+        // Player has left the timer scene.
+        if (!isInTimerScene && wasInTimerScene)
+        {
+            sceneTimer = 0f;
+            sceneTimerFinished = false;
+        }
+
+        wasInTimerScene = isInTimerScene;
+
+        // Only count while inside the selected scene.
+        if (isInTimerScene && !sceneTimerFinished)
+        {
+            sceneTimer += Time.unscaledDeltaTime;
+
+            if (sceneTimer >= timeBeforeSceneChange)
+            {
+                sceneTimerFinished = true;
+
+                SceneManager.LoadScene(destinationSceneName);
+            }
+        }
     }
 
     void UpdateDisplays()
@@ -80,5 +125,11 @@ public class GameTimeTracker : MonoBehaviour
     public void ResetPlayTime()
     {
         totalPlayTime = 0f;
+    }
+
+    public void ResetSceneTimer()
+    {
+        sceneTimer = 0f;
+        sceneTimerFinished = false;
     }
 }

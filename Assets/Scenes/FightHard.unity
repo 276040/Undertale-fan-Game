@@ -1664,8 +1664,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 625a4e35c88694693935b8da3fedbf6c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  maxHealth: 2112
-  currentHealth: 2112
+  maxHealth: 1
+  currentHealth: 1
   contactDamage: 1
   healthBar: {fileID: 77439027}
   healthText: {fileID: 131168066}
@@ -21621,7 +21621,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1640261898}
   - component: {fileID: 1640261897}
-  - component: {fileID: 1640261899}
   m_Layer: 0
   m_Name: TimeManager
   m_TagString: Untagged
@@ -21648,6 +21647,10 @@ MonoBehaviour:
   showPlayTime: 1
   showDate: 1
   use24HourClock: 1
+  timerSceneName: FightHard
+  destinationSceneName: WinHard
+  timeBeforeSceneChange: 153
+  enableSceneTimer: 1
 --- !u!4 &1640261898
 Transform:
   m_ObjectHideFlags: 0
@@ -21663,20 +21666,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1640261899
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1640261896}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c222ea913c10b014ea3736ca334719c0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  sceneToLoad: WinHard
-  timeBeforeSceneChange: 148
 --- !u!1 &1651772477 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 2309877568467917600, guid: 1e5a1e2a994a345b196c7bf31f0f18ee, type: 3}

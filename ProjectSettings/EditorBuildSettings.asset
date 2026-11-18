@@ -29,6 +29,15 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/GameOverHard.unity
     guid: ac3c51044b0c63f4d950327257bd47bc
+  - enabled: 1
+    path: Assets/Scenes/WinEasy.unity
+    guid: aa396426f6dba35449dec29699d73582
+  - enabled: 1
+    path: Assets/Scenes/Win.unity
+    guid: 841fcb969d021f446b5b8a9699862e8c
+  - enabled: 1
+    path: Assets/Scenes/WinHard.unity
+    guid: d4766cc31e98143459105ceec990c576
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
   m_UseUCBPForAssetBundles: 0
